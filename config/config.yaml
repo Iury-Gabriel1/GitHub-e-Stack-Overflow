@@ -1,0 +1,17 @@
+github:
+  token: $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
+  base_url: "https://api.github.com"
+  per_page: 100
+
+stackexchange:
+  key: $rl_Vz9VaQg8XqCVKHyTCU3xQLJgg
+  base_url: "https://api.stackexchange.com/2.3"
+  site: "stackoverflow"
+  pagesize: 100
+
+database:
+  host: "postgres"
+  port: 5432
+  database: "etl_db"
+  user: "etl_user"
+  password: "etl_password"
