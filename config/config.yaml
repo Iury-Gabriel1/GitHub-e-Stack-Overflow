@@ -1,10 +1,10 @@
 github:
-  token: $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
+  token: ""
   base_url: "https://api.github.com"
   per_page: 100
 
 stackexchange:
-  key: $rl_Vz9VaQg8XqCVKHyTCU3xQLJgg
+  key: ""
   base_url: "https://api.stackexchange.com/2.3"
   site: "stackoverflow"
   pagesize: 100

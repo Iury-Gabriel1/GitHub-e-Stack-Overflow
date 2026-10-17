@@ -10,16 +10,32 @@ logger = logging.getLogger(__name__)
 
 class GitHubExtractor:
     def __init__(self, config_path: str = '/opt/airflow/config/config.yaml'):
+        default_config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'config',
+            'config.yaml'
+        )
+        if not os.path.exists(config_path) and os.path.exists(default_config_path):
+            config_path = default_config_path
+
         with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-        
-        self.base_url = self.config['github']['base_url']
-        self.token = os.getenv('GITHUB_TOKEN')
+            self.config = yaml.safe_load(f) or {}
+
+        github_config = self.config.get('github', {})
+        self.base_url = github_config.get('base_url', 'https://api.github.com')
+        self.per_page = github_config.get('per_page', 100)
+
+        raw_token = os.getenv('GITHUB_TOKEN') or github_config.get('token', '')
+        if isinstance(raw_token, str):
+            raw_token = raw_token.strip()
+            if raw_token in {'', '$******', '******', 'changeme', 'your_github_token'}:
+                raw_token = None
+        self.token = raw_token
         self.headers = {
-            'Authorization': f'token {self.token}',
             'Accept': 'application/vnd.github.v3+json'
         }
-        self.per_page = self.config['github']['per_page']
+        if self.token:
+            self.headers['Authorization'] = f'token {self.token}'
     
     def _handle_rate_limit(self, response: requests.Response):
         """Trata limites de requisição da API GitHub."""

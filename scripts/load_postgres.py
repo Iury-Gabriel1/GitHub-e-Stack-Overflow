@@ -10,26 +10,42 @@ logger = logging.getLogger(__name__)
 
 class PostgresLoader:
     def __init__(self, config_path: str = '/opt/airflow/config/config.yaml'):
+        default_config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'config',
+            'config.yaml'
+        )
+        if not os.path.exists(config_path) and os.path.exists(default_config_path):
+            config_path = default_config_path
+
         with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-        
-        db = self.config['database']
+            self.config = yaml.safe_load(f) or {}
+
+        db = self.config.get('database', {})
         self.connection_string = (
-            f"postgresql+psycopg2://{db['user']}:{db['password']}"
-            f"@{db['host']}:{db['port']}/{db['database']}"
+            f"postgresql+psycopg2://{db.get('user', 'etl_user')}:{db.get('password', 'etl_password')}"
+            f"@{db.get('host', 'postgres')}:{db.get('port', 5432)}/{db.get('database', 'etl_db')}"
         )
         self.engine = create_engine(self.connection_string, pool_pre_ping=True)
-    
+
     def create_tables(self, sql_file: str = '/opt/airflow/sql/create_tables.sql'):
         """Cria as tabelas no banco de dados."""
+        if not os.path.exists(sql_file):
+            local_sql_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                'sql',
+                'create_tables.sql'
+            )
+            if os.path.exists(local_sql_path):
+                sql_file = local_sql_path
+
         logger.info("Criando tabelas no PostgreSQL...")
-        
+
         with open(sql_file, 'r') as f:
             sql = f.read()
         
-        with self.engine.connect() as conn:
+        with self.engine.begin() as conn:
             conn.execute(text(sql))
-            conn.commit()
         
         logger.info("Tabelas criadas com sucesso.")
     
@@ -83,18 +99,19 @@ class PostgresLoader:
         
         records = df.to_dict('records')
         
-        with self.engine.connect() as conn:
+        with self.engine.begin() as conn:
             for i in range(0, len(records), 1000):
                 batch = records[i:i + 1000]
                 conn.execute(text(query), batch)
-            conn.commit()
         
         logger.info(f"Upsert concluído: {table_name}")
     
     def execute_query(self, query: str) -> pd.DataFrame:
         """Executa uma consulta SQL e retorna um DataFrame."""
         with self.engine.connect() as conn:
-            return pd.read_sql(text(query), conn)
+            result = conn.execute(text(query))
+            rows = result.mappings().all()
+            return pd.DataFrame(rows)
     
     def get_table_counts(self) -> dict:
         """Retorna a contagem de registros por tabela."""

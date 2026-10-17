@@ -12,13 +12,28 @@ logger = logging.getLogger(__name__)
 
 class StackOverflowExtractor:
     def __init__(self, config_path: str = '/opt/airflow/config/config.yaml'):
+        default_config_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            'config',
+            'config.yaml'
+        )
+        if not os.path.exists(config_path) and os.path.exists(default_config_path):
+            config_path = default_config_path
+
         with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-        
-        self.base_url = self.config['stackexchange']['base_url']
-        self.site = self.config['stackexchange']['site']
-        self.key = os.getenv('STACKEXCHANGE_KEY')
-        self.pagesize = self.config['stackexchange']['pagesize']
+            self.config = yaml.safe_load(f) or {}
+
+        stack_config = self.config.get('stackexchange', {})
+        self.base_url = stack_config.get('base_url', 'https://api.stackexchange.com/2.3')
+        self.site = stack_config.get('site', 'stackoverflow')
+        self.pagesize = stack_config.get('pagesize', 100)
+
+        raw_key = os.getenv('STACKEXCHANGE_KEY') or stack_config.get('key', '')
+        if isinstance(raw_key, str):
+            raw_key = raw_key.strip()
+            if raw_key in {'', '$******', '******', 'changeme', 'your_stackexchange_key', 'your_api_key'}:
+                raw_key = None
+        self.key = raw_key
         self.session = requests.Session()
     
     def _make_request(self, endpoint: str, params: Dict = None) -> Dict:
@@ -28,10 +43,11 @@ class StackOverflowExtractor:
         
         params.update({
             'site': self.site,
-            'key': self.key,
             'pagesize': self.pagesize,
             'filter': 'withbody'
         })
+        if self.key:
+            params['key'] = self.key
         
         url = f"{self.base_url}{endpoint}"
         max_retries = 3
